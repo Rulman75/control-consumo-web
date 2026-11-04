@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import { APP_VERSION, GIT_HASH } from '../version';
 
 interface LoginProps {
   onLogin: (token: string, username: string, role: string, roleLabel: string, sector: string) => void;
@@ -50,15 +51,21 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           <div className="absolute -top-20 -left-20 w-64 h-64 rounded-full bg-white opacity-5"></div>
           <div className="absolute -bottom-20 -right-20 w-80 h-80 rounded-full bg-[#39BABD] opacity-20"></div>
 
-          <div className="z-10 mt-6">
+          <div className="z-10 mt-6 flex flex-col items-center">
             <img
               src="/logo.png"
               alt="Logo CMDS"
-              className="w-36 h-auto mx-auto mb-6 bg-white p-3 rounded-xl shadow-md"
+              className="w-36 h-auto mx-auto mb-3 bg-white p-3 rounded-xl shadow-md"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = 'none';
               }}
             />
+            <span
+              title={GIT_HASH ? `Commit: ${GIT_HASH}` : undefined}
+              className="inline-block text-[11px] font-mono font-semibold tracking-wider bg-white/15 text-blue-100 px-3 py-0.5 rounded-full mb-4 border border-white/15"
+            >
+              Versión v{APP_VERSION}
+            </span>
             <h1 className="text-3xl font-extrabold tracking-tight mb-2 text-yellow-400">CMDS</h1>
             <h2 className="text-lg font-medium text-blue-100">Corporación Municipal de Desarrollo Social</h2>
           </div>
@@ -192,9 +199,12 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </div>
           </form>
 
-          <div className="mt-8 border-t border-gray-100 pt-6 text-center">
+          <div className="mt-8 border-t border-gray-100 pt-6 text-center space-y-1">
             <p className="text-xs text-gray-400">
               Unidad de Control de Consumos Básicos — CMDS
+            </p>
+            <p className="text-[11px] font-mono text-gray-400">
+              v{APP_VERSION}{GIT_HASH ? ` (${GIT_HASH})` : ''}
             </p>
           </div>
         </div>

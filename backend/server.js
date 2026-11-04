@@ -9,6 +9,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const pkg = require('./package.json');
+app.get('/api/version', (req, res) => {
+    res.json({ version: pkg.version || '1.0.0' });
+});
+
 // 1. Ruta de Autenticación (Tabla Usuarios + soporte credencial histórica rc/1595)
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;

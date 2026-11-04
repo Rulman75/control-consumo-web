@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { APP_VERSION, GIT_HASH } from '../version';
 
 interface LayoutProps {
   username: string;
@@ -27,11 +28,17 @@ export const Layout: React.FC<LayoutProps> = ({ username, role, roleLabel, secto
             <img
               src="/logo.png"
               alt="Logo CMDS"
-              className="max-w-[90px] h-auto mb-2.5 bg-white p-2 rounded-lg shadow-md"
+              className="max-w-[90px] h-auto mb-2 bg-white p-2 rounded-lg shadow-md"
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = 'none';
               }}
             />
+            <span
+              title={GIT_HASH ? `Commit: ${GIT_HASH}` : undefined}
+              className="text-[10px] font-mono font-semibold tracking-wider bg-white/15 text-blue-100 px-2.5 py-0.5 rounded-full mb-2 border border-white/15"
+            >
+              v{APP_VERSION}
+            </span>
             <h4 className="text-[1.05rem] font-bold tracking-wide m-0 leading-tight">
               Control de Consumos
             </h4>
