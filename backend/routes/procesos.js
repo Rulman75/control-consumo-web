@@ -101,46 +101,39 @@ router.post('/nominas/generar', async (req, res) => {
         return res.status(400).json({ error: 'Debe especificar Servicio, Tipo de Documento y Sector para generar la nómina.' });
     }
 
-    const pool = await getPool();
-    const transaction = new sql.Transaction(pool);
     try {
-        await transaction.begin();
-
-        const corrReq = new sql.Request(transaction);
+        const pool = await getPool();
+        const corrReq = pool.request();
         const corrRes = await corrReq.query('SELECT ISNULL(MAX(Nomina), 0) + 1 AS SiguienteNomina FROM Documentos');
         const nuevaNomina = corrRes.recordset[0].SiguienteNomina;
 
-        const updReq = new sql.Request(transaction);
+        const updReq = pool.request();
         updReq.input('nuevaNomina', sql.Int, nuevaNomina);
         updReq.input('codser', sql.VarChar, codser.trim());
         updReq.input('tipo', sql.VarChar, tipo.trim());
         updReq.input('sector', sql.VarChar, sector.trim());
 
         const updRes = await updReq.query(`
-            UPDATE d
-            SET d.Nomina = @nuevaNomina,
-                d.Estado = 'Enviada'
-            FROM Documentos d
-            INNER JOIN Clientes c ON CAST(c.ncliente AS VARCHAR(50)) = RTRIM(d.NCliente)
-            OUTER APPLY (
-                SELECT TOP 1 CodSer, NombreSer
-                FROM Servicios srv
-                WHERE RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
-                ORDER BY srv.CodSer
-            ) s
-            WHERE ISNULL(d.Nomina, 0) = 0
-              AND (RTRIM(c.Codser) = @codser OR RTRIM(ISNULL(s.CodSer, '')) = @codser OR RTRIM(ISNULL(s.NombreSer, '')) = @codser)
-              AND RTRIM(d.Tipo) = @tipo
-              AND RTRIM(c.Sector) = @sector
+            UPDATE Documentos
+            SET Nomina = @nuevaNomina,
+                Estado = 'Enviada'
+            WHERE ISNULL(Nomina, 0) = 0
+              AND RTRIM(Tipo) = @tipo
+              AND RTRIM(NCliente) IN (
+                  SELECT CAST(c.ncliente AS VARCHAR(50))
+                  FROM Clientes c
+                  LEFT JOIN Servicios srv
+                    ON RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
+                  WHERE RTRIM(c.Sector) = @sector
+                    AND (RTRIM(c.Codser) = @codser OR RTRIM(ISNULL(srv.CodSer, '')) = @codser OR RTRIM(ISNULL(srv.NombreSer, '')) = @codser)
+              )
         `);
 
         const totalActualizados = updRes.rowsAffected[0] || 0;
         if (totalActualizados === 0) {
-            await transaction.rollback();
             return res.status(400).json({ error: 'No se encontraron documentos pendientes para incluir en la nómina.' });
         }
 
-        await transaction.commit();
         res.json({
             success: true,
             nomina: nuevaNomina,
@@ -148,7 +141,6 @@ router.post('/nominas/generar', async (req, res) => {
             message: `Nómina Nº ${nuevaNomina} generada exitosamente con ${totalActualizados} documentos.`
         });
     } catch (error) {
-        try { await transaction.rollback(); } catch (_) {}
         console.error('Error al generar nómina:', error);
         res.status(500).json({ error: 'Error al generar la nómina en la base de datos.' });
     }

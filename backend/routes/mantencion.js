@@ -214,28 +214,24 @@ router.post('/clientes/trasladar', async (req, res) => {
         return res.status(400).json({ error: 'Debe indicar el Nº de Cliente actual y el nuevo Nº de Cliente numérico.' });
     }
 
-    const pool = await getPool();
-    const transaction = new sql.Transaction(pool);
     try {
-        await transaction.begin();
+        const pool = await getPool();
 
-        const checkActual = new sql.Request(transaction);
+        const checkActual = pool.request();
         checkActual.input('actual', sql.Numeric(18, 0), Number(nclienteActual));
         const resActual = await checkActual.query('SELECT ncliente FROM Clientes WHERE ncliente = @actual');
         if (resActual.recordset.length === 0) {
-            await transaction.rollback();
             return res.status(404).json({ error: `El Nº de Cliente actual (${nclienteActual}) no existe.` });
         }
 
-        const checkNuevo = new sql.Request(transaction);
+        const checkNuevo = pool.request();
         checkNuevo.input('nuevo', sql.Numeric(18, 0), Number(nclienteNuevo));
         const resNuevo = await checkNuevo.query('SELECT ncliente FROM Clientes WHERE ncliente = @nuevo');
         if (resNuevo.recordset.length > 0) {
-            await transaction.rollback();
             return res.status(400).json({ error: `El nuevo Nº de Cliente (${nclienteNuevo}) ya se encuentra registrado.` });
         }
 
-        const updateCli = new sql.Request(transaction);
+        const updateCli = pool.request();
         updateCli.input('actual', sql.Numeric(18, 0), Number(nclienteActual));
         updateCli.input('nuevo', sql.Numeric(18, 0), Number(nclienteNuevo));
         await updateCli.query(`
@@ -247,7 +243,7 @@ router.post('/clientes/trasladar', async (req, res) => {
 
         let docsActualizados = 0;
         if (trasladarDocumentos) {
-            const updateDocs = new sql.Request(transaction);
+            const updateDocs = pool.request();
             updateDocs.input('actualStr', sql.VarChar, String(nclienteActual).trim());
             updateDocs.input('nuevoStr', sql.VarChar, String(nclienteNuevo).trim());
             const docRes = await updateDocs.query(`
@@ -258,14 +254,12 @@ router.post('/clientes/trasladar', async (req, res) => {
             docsActualizados = docRes.rowsAffected[0] || 0;
         }
 
-        await transaction.commit();
         res.json({
             success: true,
             docsActualizados,
             message: `NIC trasladado exitosamente de ${nclienteActual} a ${nclienteNuevo}.`
         });
     } catch (error) {
-        try { await transaction.rollback(); } catch (_) {}
         console.error('Error al trasladar NIC:', error);
         res.status(500).json({ error: 'Error al realizar el traslado de NIC.' });
     }
