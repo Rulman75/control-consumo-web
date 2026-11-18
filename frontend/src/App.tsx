@@ -10,6 +10,7 @@ import { ProcesosNominas } from './pages/ProcesosNominas';
 import { ProcesosPagos } from './pages/ProcesosPagos';
 import { ProcesosSoftland } from './pages/ProcesosSoftland';
 import { InformesConsumos } from './pages/InformesConsumos';
+import { MantencionUsuarios } from './pages/MantencionUsuarios';
 
 function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('cmds_consumos_token'));
@@ -78,6 +79,7 @@ function App() {
           <Route path="procesos/pagos" element={<ProcesosPagos />} />
           <Route path="procesos/softland" element={<ProcesosSoftland />} />
           <Route path="informes" element={<InformesConsumos />} />
+          <Route path="mantencion/usuarios" element={<MantencionUsuarios />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
