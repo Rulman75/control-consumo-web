@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
+import { ToastNotification } from '../components/ToastNotification';
 
 const getTodayYMD = () => {
   const now = new Date();
@@ -88,13 +89,22 @@ export const MantencionDocumentos: React.FC = () => {
     });
   }, []);
 
-  const consultarClienteHistorial = async (qServicio = codser, qCliente = ncliente, qAnio = filtroAnio) => {
+  const consultarClienteHistorial = async (
+    qServicio = codser,
+    qCliente = ncliente,
+    qAnio = filtroAnio,
+    silent = false
+  ) => {
     if (!qCliente.trim()) {
-      setMensaje({ tipo: 'err', texto: 'Ingrese un Nº de Cliente (NIC) para buscar.' });
+      if (!silent) {
+        setMensaje({ tipo: 'err', texto: 'Ingrese un Nº de Cliente (NIC) para buscar.' });
+      }
       return;
     }
     setLoadingHistorial(true);
-    setMensaje(null);
+    if (!silent) {
+      setMensaje(null);
+    }
     try {
       const res = await axios.get('/api/mantencion/documentos/cliente', {
         params: { codser: qServicio, ncliente: qCliente.trim(), anio: qAnio }
@@ -103,13 +113,21 @@ export const MantencionDocumentos: React.FC = () => {
       setCodser(res.data.cliente.codser);
       setNcliente(String(res.data.cliente.ncliente));
       setDocumentosCliente(res.data.documentos || []);
+      if (!silent) {
+        setMensaje({
+          tipo: 'ok',
+          texto: `Cliente NIC ${res.data.cliente.ncliente} (${res.data.cliente.nombre}) cargado con ${(res.data.documentos || []).length} documentos.`
+        });
+      }
     } catch (err: any) {
       setClienteInfo(null);
       setDocumentosCliente([]);
-      setMensaje({
-        tipo: 'err',
-        texto: err.response?.data?.error || 'Cliente no existe para el servicio seleccionado.'
-      });
+      if (!silent) {
+        setMensaje({
+          tipo: 'err',
+          texto: err.response?.data?.error || 'Cliente no existe para el servicio seleccionado.'
+        });
+      }
     } finally {
       setLoadingHistorial(false);
     }
@@ -176,7 +194,7 @@ export const MantencionDocumentos: React.FC = () => {
     }
   };
 
-  const limpiarFacturacion = () => {
+  const limpiarFacturacion = (keepMessage = false) => {
     setNdocto('');
     setNdoctoOriginal('');
     setNclienteOriginal('');
@@ -199,11 +217,21 @@ export const MantencionDocumentos: React.FC = () => {
     setMonto('0');
     setNomina('0');
     setAlertaNomina(null);
-    setMensaje(null);
+    if (!keepMessage) {
+      setMensaje(null);
+    }
   };
 
   const handleGuardarDocumento = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!ncliente.trim()) {
+      setMensaje({ tipo: 'err', texto: 'Debe indicar o buscar primero el Nº de Cliente (NIC) en la barra superior.' });
+      return;
+    }
+    if (!ndocto.trim()) {
+      setMensaje({ tipo: 'err', texto: 'Debe ingresar el Nº de Documento (Boleta o Factura).' });
+      return;
+    }
     setMensaje(null);
     try {
       const res = await axios.post('/api/mantencion/documentos', {
@@ -229,12 +257,15 @@ export const MantencionDocumentos: React.FC = () => {
         NDoctoOriginal: ndoctoOriginal || undefined,
         NClienteOriginal: nclienteOriginal || undefined
       });
-      setMensaje({ tipo: 'ok', texto: res.data.message });
       setNdoctoOriginal(ndocto.trim());
       setNclienteOriginal(ncliente.trim());
       if (ncliente.trim()) {
-        consultarClienteHistorial(codser, ncliente, filtroAnio);
+        await consultarClienteHistorial(codser, ncliente, filtroAnio, true);
       }
+      setMensaje({
+        tipo: 'ok',
+        texto: res.data.message || `Documento Nº ${ndocto} guardado exitosamente.`
+      });
     } catch (err: any) {
       setMensaje({ tipo: 'err', texto: err.response?.data?.error || 'Error al guardar el documento.' });
     }
@@ -253,11 +284,14 @@ export const MantencionDocumentos: React.FC = () => {
       const res = await axios.delete('/api/mantencion/documentos', {
         params: { ndocto: ndocto.trim(), ncliente: ncliente.trim(), nomina: Number(nomina) || 0 }
       });
-      setMensaje({ tipo: 'ok', texto: res.data.message });
-      limpiarFacturacion();
+      limpiarFacturacion(true);
       if (ncliente.trim()) {
-        consultarClienteHistorial(codser, ncliente, filtroAnio);
+        await consultarClienteHistorial(codser, ncliente, filtroAnio, true);
       }
+      setMensaje({
+        tipo: 'ok',
+        texto: res.data.message || 'Documento eliminado correctamente.'
+      });
     } catch (err: any) {
       setMensaje({ tipo: 'err', texto: err.response?.data?.error || 'Error al eliminar el documento.' });
     }
@@ -330,18 +364,7 @@ export const MantencionDocumentos: React.FC = () => {
         </div>
       </div>
 
-      {mensaje && (
-        <div
-          className={`p-4 rounded-xl border text-sm font-medium flex items-center justify-between print:hidden ${
-            mensaje.tipo === 'ok'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-              : 'bg-red-50 border-red-200 text-red-700'
-          }`}
-        >
-          <span>{mensaje.texto}</span>
-          <button onClick={() => setMensaje(null)} className="text-xs font-bold underline ml-4">Cerrar</button>
-        </div>
-      )}
+      <ToastNotification mensaje={mensaje} onClose={() => setMensaje(null)} />
 
       {/* Barra Superior de Identificación del Cliente / Medidor */}
       <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-100">
@@ -822,7 +845,7 @@ export const MantencionDocumentos: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={limpiarFacturacion}
+                  onClick={() => limpiarFacturacion(false)}
                   className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs transition-colors cursor-pointer"
                 >
                   Limpiar Campos

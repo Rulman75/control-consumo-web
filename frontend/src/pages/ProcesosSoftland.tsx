@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import { ToastNotification } from '../components/ToastNotification';
 
 export const ProcesosSoftland: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -10,18 +11,27 @@ export const ProcesosSoftland: React.FC = () => {
   const [vista, setVista] = useState<'contable' | 'sabana52'>('contable');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [mensaje, setMensaje] = useState<{ tipo: 'ok' | 'err'; texto: string } | null>(null);
 
-  const consultarSoftland = async (num = nominaInput) => {
+  const consultarSoftland = async (num = nominaInput, silent = false) => {
     if (!num.trim()) return;
     setLoading(true);
-    setError(null);
+    if (!silent) setMensaje(null);
     try {
       const res = await axios.get(`/api/procesos/softland/${num.trim()}`);
       setData(res.data);
+      if (!silent) {
+        setMensaje({
+          tipo: 'ok',
+          texto: `Nómina Nº ${res.data.resumen.nomina} cargada (${res.data.resumen.totalDocumentos} documentos).`
+        });
+      }
     } catch (err: any) {
       setData(null);
-      setError(err.response?.data?.error || 'Error al consultar la nómina para Softland.');
+      setMensaje({
+        tipo: 'err',
+        texto: err.response?.data?.error || 'Error al consultar la nómina para Softland.'
+      });
     } finally {
       setLoading(false);
     }
@@ -31,17 +41,24 @@ export const ProcesosSoftland: React.FC = () => {
     const qNom = searchParams.get('nomina');
     if (qNom) {
       setNominaInput(qNom);
-      consultarSoftland(qNom);
+      consultarSoftland(qNom, true);
     }
   }, [searchParams]);
 
   const autorizarDirecto = async () => {
     if (!data?.resumen?.nomina) return;
     try {
-      await axios.post('/api/procesos/nominas/autorizar', { nomina: data.resumen.nomina });
-      consultarSoftland(String(data.resumen.nomina));
+      const res = await axios.post('/api/procesos/nominas/autorizar', { nomina: data.resumen.nomina });
+      await consultarSoftland(String(data.resumen.nomina), true);
+      setMensaje({
+        tipo: 'ok',
+        texto: res.data.message || `Nómina Nº ${data.resumen.nomina} autorizada exitosamente.`
+      });
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Error al autorizar la nómina.');
+      setMensaje({
+        tipo: 'err',
+        texto: err.response?.data?.error || 'Error al autorizar la nómina.'
+      });
     }
   };
 
@@ -90,11 +107,7 @@ export const ProcesosSoftland: React.FC = () => {
         </div>
       </div>
 
-      {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
-          {error}
-        </div>
-      )}
+      <ToastNotification mensaje={mensaje} onClose={() => setMensaje(null)} />
 
       {resumen && !resumen.autorizada && (
         <div className="p-4 rounded-xl bg-amber-50 border-l-4 border-amber-500 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
@@ -280,7 +293,7 @@ export const ProcesosSoftland: React.FC = () => {
         </div>
       )}
 
-      {!loading && !resumen && !error && (
+      {!loading && !resumen && !mensaje && (
         <div className="bg-white p-12 rounded-xl shadow-sm border border-slate-100 text-center text-slate-400 text-sm">
           Ingrese un Nº de Nómina arriba y presione <strong>Consultar Nómina</strong> para generar los asientos contables y descargar el archivo Softland.
         </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { ToastNotification } from '../components/ToastNotification';
 
 export const MantencionServicios: React.FC = () => {
   const [servicios, setServicios] = useState<any[]>([]);
@@ -82,18 +83,7 @@ export const MantencionServicios: React.FC = () => {
         </p>
       </div>
 
-      {mensaje && (
-        <div
-          className={`p-4 rounded-xl border text-sm font-medium flex items-center justify-between ${
-            mensaje.tipo === 'ok'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-              : 'bg-red-50 border-red-200 text-red-700'
-          }`}
-        >
-          <span>{mensaje.texto}</span>
-          <button onClick={() => setMensaje(null)} className="text-xs font-bold underline ml-4">Cerrar</button>
-        </div>
-      )}
+      <ToastNotification mensaje={mensaje} onClose={() => setMensaje(null)} />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Formulario Frm_Servicios.vb */}

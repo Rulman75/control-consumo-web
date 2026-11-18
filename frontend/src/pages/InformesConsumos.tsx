@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
+import { ToastNotification } from '../components/ToastNotification';
 
 type TipoInforme = 'servicio' | 'cliente' | 'nomina' | 'consolidado' | 'presupuesto';
 
@@ -32,7 +33,7 @@ export const InformesConsumos: React.FC = () => {
 
   const [resultados, setResultados] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [mensaje, setMensaje] = useState<{ tipo: 'ok' | 'err'; texto: string } | null>(null);
 
   useEffect(() => {
     axios.get('/api/mantencion/catalogos').then((res) => {
@@ -53,28 +54,38 @@ export const InformesConsumos: React.FC = () => {
   const handleGenerarInforme = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setLoading(true);
-    setError(null);
+    setMensaje(null);
     setResultados([]);
 
     try {
+      let rows: any[] = [];
       if (tab === 'servicio') {
         const res = await axios.get('/api/informes/por-servicio', { params: { codser, desde, hasta } });
-        setResultados(res.data || []);
+        rows = res.data || [];
       } else if (tab === 'cliente') {
         const res = await axios.get('/api/informes/por-cliente', { params: { ncliente, desde, hasta } });
-        setResultados(res.data || []);
+        rows = res.data || [];
       } else if (tab === 'nomina') {
         const res = await axios.get('/api/informes/por-nomina', { params: { nomina } });
-        setResultados(res.data || []);
+        rows = res.data || [];
       } else if (tab === 'consolidado') {
         const res = await axios.get('/api/informes/consolidado', { params: { codser, anio, sector } });
-        setResultados(res.data || []);
+        rows = res.data || [];
       } else if (tab === 'presupuesto') {
         const res = await axios.get('/api/informes/presupuesto', { params: { codser, desde, hasta, sector } });
-        setResultados(res.data || []);
+        rows = res.data || [];
+      }
+      setResultados(rows);
+      if (rows.length > 0) {
+        setMensaje({ tipo: 'ok', texto: `Informe generado correctamente (${rows.length} registros).` });
+      } else {
+        setMensaje({ tipo: 'err', texto: 'No se encontraron registros para los filtros seleccionados.' });
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Error al generar el informe solicitado.');
+      setMensaje({
+        tipo: 'err',
+        texto: err.response?.data?.error || 'Error al generar el informe solicitado.'
+      });
     } finally {
       setLoading(false);
     }
@@ -235,7 +246,7 @@ export const InformesConsumos: React.FC = () => {
               onClick={() => {
                 setTab(item.id as TipoInforme);
                 setResultados([]);
-                setError(null);
+                setMensaje(null);
               }}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 tab === item.id
@@ -360,11 +371,7 @@ export const InformesConsumos: React.FC = () => {
         </form>
       </div>
 
-      {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium print:hidden">
-          {error}
-        </div>
-      )}
+      <ToastNotification mensaje={mensaje} onClose={() => setMensaje(null)} />
 
       {/* Hoja de Reporte Institucional (Imprimible) */}
       <div className="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-slate-100 print:shadow-none print:border-none">

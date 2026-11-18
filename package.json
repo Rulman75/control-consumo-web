@@ -1,6 +1,6 @@
 {
   "name": "control-consumo-web",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "Sistema de Control de Consumos Básicos - CMDS Antofagasta",
   "scripts": {

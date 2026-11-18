@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
+import { ToastNotification } from '../components/ToastNotification';
 
 export const ProcesosNominas: React.FC = () => {
   const [servicios, setServicios] = useState<any[]>([]);
@@ -48,7 +49,19 @@ export const ProcesosNominas: React.FC = () => {
       const res = await axios.get('/api/procesos/nominas/pendientes', {
         params: { codser: qSrv, tipo: qTipo, sector: qSec }
       });
-      setPendientes(res.data || []);
+      const docs = res.data || [];
+      setPendientes(docs);
+      if (docs.length > 0) {
+        setMensaje({
+          tipo: 'ok',
+          texto: `Se encontraron ${docs.length} documentos pendientes para ${qSrv} (${qSec} - ${qTipo}).`
+        });
+      } else {
+        setMensaje({
+          tipo: 'err',
+          texto: `No hay documentos pendientes (Nómina = 0) para ${qSrv} en sector ${qSec} y tipo ${qTipo}.`
+        });
+      }
     } catch (err: any) {
       setMensaje({ tipo: 'err', texto: err.response?.data?.error || 'Error al buscar documentos pendientes.' });
     } finally {
@@ -124,18 +137,7 @@ export const ProcesosNominas: React.FC = () => {
         </div>
       </div>
 
-      {mensaje && (
-        <div
-          className={`p-4 rounded-xl border text-sm font-medium flex items-center justify-between ${
-            mensaje.tipo === 'ok'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-              : 'bg-red-50 border-red-200 text-red-700'
-          }`}
-        >
-          <span>{mensaje.texto}</span>
-          <button onClick={() => setMensaje(null)} className="text-xs font-bold underline ml-4">Cerrar</button>
-        </div>
-      )}
+      <ToastNotification mensaje={mensaje} onClose={() => setMensaje(null)} />
 
       {/* Panel de Generación de Nómina (GeneraNomina.vb) */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-5">

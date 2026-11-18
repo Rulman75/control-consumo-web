@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSearchParams } from 'react-router-dom';
+import { ToastNotification } from '../components/ToastNotification';
 
 const getTodayYMD = () => {
   const now = new Date();
@@ -40,10 +41,12 @@ export const ProcesosPagos: React.FC = () => {
   const [ncpbte, setNcpbte] = useState('');
   const [mensaje, setMensaje] = useState<{ tipo: 'ok' | 'err'; texto: string } | null>(null);
 
-  const consultarNomina = async (num = nominaInput) => {
+  const consultarNomina = async (num = nominaInput, silent = false) => {
     if (!num.trim()) return;
     setLoading(true);
-    setMensaje(null);
+    if (!silent) {
+      setMensaje(null);
+    }
     try {
       const res = await axios.get(`/api/procesos/pagos/${num.trim()}`);
       setResumen(res.data.resumen);
@@ -56,10 +59,18 @@ export const ProcesosPagos: React.FC = () => {
       } else {
         setNcpbte('');
       }
+      if (!silent) {
+        setMensaje({
+          tipo: 'ok',
+          texto: `Nómina Nº ${res.data.resumen.nomina} cargada (${res.data.resumen.totalDocumentos} documentos).`
+        });
+      }
     } catch (err: any) {
       setResumen(null);
       setDocumentos([]);
-      setMensaje({ tipo: 'err', texto: err.response?.data?.error || 'Nómina no encontrada.' });
+      if (!silent) {
+        setMensaje({ tipo: 'err', texto: err.response?.data?.error || 'Nómina no encontrada.' });
+      }
     } finally {
       setLoading(false);
     }
@@ -69,7 +80,7 @@ export const ProcesosPagos: React.FC = () => {
     const qNom = searchParams.get('nomina');
     if (qNom) {
       setNominaInput(qNom);
-      consultarNomina(qNom);
+      consultarNomina(qNom, true);
     }
   }, [searchParams]);
 
@@ -83,8 +94,11 @@ export const ProcesosPagos: React.FC = () => {
         fechaPago,
         ncpbte
       });
-      setMensaje({ tipo: 'ok', texto: res.data.message });
-      consultarNomina(String(resumen.nomina));
+      await consultarNomina(String(resumen.nomina), true);
+      setMensaje({
+        tipo: 'ok',
+        texto: res.data.message || `Pagos grabados exitosamente para la Nómina Nº ${resumen.nomina}.`
+      });
     } catch (err: any) {
       setMensaje({ tipo: 'err', texto: err.response?.data?.error || 'Error al registrar pagos masivos.' });
     }
@@ -99,18 +113,7 @@ export const ProcesosPagos: React.FC = () => {
         </p>
       </div>
 
-      {mensaje && (
-        <div
-          className={`p-4 rounded-xl border text-sm font-medium flex items-center justify-between ${
-            mensaje.tipo === 'ok'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-              : 'bg-red-50 border-red-200 text-red-700'
-          }`}
-        >
-          <span>{mensaje.texto}</span>
-          <button onClick={() => setMensaje(null)} className="text-xs font-bold underline ml-4">Cerrar</button>
-        </div>
-      )}
+      <ToastNotification mensaje={mensaje} onClose={() => setMensaje(null)} />
 
       {/* Buscador e Imputación Masiva (IngresoPagos.vb) */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 space-y-6">
