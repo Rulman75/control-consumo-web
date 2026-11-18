@@ -221,7 +221,9 @@ export const ProcesosSoftland: React.FC = () => {
                       <td className="py-2 px-3 font-semibold">{r.Tipo}</td>
                       <td className="py-2 px-3 font-bold">{r.NDocto}</td>
                       <td className="py-2 px-3">
-                        {r.FechaEmision ? new Date(r.FechaEmision).toLocaleDateString('es-CL') : '—'}
+                        {r.FechaEmision && String(r.FechaEmision).match(/^(\d{4})-(\d{2})-(\d{2})/)
+                          ? String(r.FechaEmision).slice(0, 10).split('-').reverse().join('-')
+                          : '—'}
                       </td>
                       <td className="py-2 px-3 text-right font-bold text-slate-800">
                         ${Number(r.Monto || 0).toLocaleString('es-CL')}

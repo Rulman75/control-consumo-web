@@ -6,6 +6,11 @@ type TipoInforme = 'servicio' | 'cliente' | 'nomina' | 'consolidado' | 'presupue
 
 const formatFecha = (val: any) => {
   if (!val) return '—';
+  const m = String(val).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    if (Number(m[1]) <= 1905) return '—';
+    return `${m[3]}-${m[2]}-${m[1]}`;
+  }
   const d = new Date(val);
   if (isNaN(d.getTime()) || d.getFullYear() <= 1905) return '—';
   return d.toLocaleDateString('es-CL');

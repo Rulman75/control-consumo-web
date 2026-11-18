@@ -273,7 +273,9 @@ export const ProcesosNominas: React.FC = () => {
                       <td className="py-2 px-3 font-bold">{p.NDocto}</td>
                       <td className="py-2 px-3">{p.Tipo}</td>
                       <td className="py-2 px-3">
-                        {p.FechaEmision ? new Date(p.FechaEmision).toLocaleDateString('es-CL') : '—'}
+                        {p.FechaEmision && String(p.FechaEmision).match(/^(\d{4})-(\d{2})-(\d{2})/)
+                          ? String(p.FechaEmision).slice(0, 10).split('-').reverse().join('-')
+                          : '—'}
                       </td>
                       <td className="py-2 px-3 text-right">{Number(p.Consumo || 0).toLocaleString('es-CL')}</td>
                       <td className="py-2 px-3 text-right font-bold text-slate-800">

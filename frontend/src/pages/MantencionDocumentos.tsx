@@ -2,15 +2,35 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 
+const getTodayYMD = () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 const toInputDate = (val: any) => {
-  if (!val) return new Date().toISOString().slice(0, 10);
+  if (!val) return getTodayYMD();
+  const str = typeof val === 'string' ? val : (val instanceof Date ? val.toISOString() : String(val));
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    if (Number(match[1]) <= 1905) return getTodayYMD();
+    return `${match[1]}-${match[2]}-${match[3]}`;
+  }
   const d = new Date(val);
-  if (isNaN(d.getTime()) || d.getFullYear() <= 1905) return new Date().toISOString().slice(0, 10);
-  return d.toISOString().slice(0, 10);
+  if (isNaN(d.getTime()) || d.getFullYear() <= 1905) return getTodayYMD();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 const formatDisplayDate = (val: any) => {
   if (!val) return '—';
+  const str = typeof val === 'string' ? val : (val instanceof Date ? val.toISOString() : String(val));
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    if (Number(match[1]) <= 1905) return '—';
+    return `${match[3]}-${match[2]}-${match[1]}`;
+  }
   const d = new Date(val);
   if (isNaN(d.getTime()) || d.getFullYear() <= 1905) return '—';
   return d.toLocaleDateString('es-CL');

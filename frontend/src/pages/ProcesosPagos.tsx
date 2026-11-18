@@ -2,11 +2,30 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useSearchParams } from 'react-router-dom';
 
+const getTodayYMD = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+
 const toInputDate = (val: any) => {
-  if (!val) return new Date().toISOString().slice(0, 10);
-  const d = new Date(val);
-  if (isNaN(d.getTime()) || d.getFullYear() <= 1905) return new Date().toISOString().slice(0, 10);
-  return d.toISOString().slice(0, 10);
+  if (!val) return getTodayYMD();
+  const str = String(val);
+  const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    if (Number(m[1]) <= 1905) return getTodayYMD();
+    return `${m[1]}-${m[2]}-${m[3]}`;
+  }
+  return getTodayYMD();
+};
+
+const formatFecha = (val: any) => {
+  if (!val) return '—';
+  const m = String(val).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    if (Number(m[1]) <= 1905) return '—';
+    return `${m[3]}-${m[2]}-${m[1]}`;
+  }
+  return '—';
 };
 
 export const ProcesosPagos: React.FC = () => {
@@ -216,15 +235,13 @@ export const ProcesosPagos: React.FC = () => {
                     <td className="py-2 px-3 font-bold text-slate-700">{d.codunidad}</td>
                     <td className="py-2 px-3 text-slate-600">{d.unidadDescripcion}</td>
                     <td className="py-2 px-3">
-                      {d.FechaEmision ? new Date(d.FechaEmision).toLocaleDateString('es-CL') : '—'}
+                      {formatFecha(d.FechaEmision)}
                     </td>
                     <td className="py-2 px-3 text-right font-bold text-slate-800">
                       ${Number(d.Monto || 0).toLocaleString('es-CL')}
                     </td>
                     <td className="py-2 px-3">
-                      {d.FechaPago && new Date(d.FechaPago).getFullYear() > 1905
-                        ? new Date(d.FechaPago).toLocaleDateString('es-CL')
-                        : '—'}
+                      {formatFecha(d.FechaPago)}
                     </td>
                     <td className="py-2 px-3 font-mono font-bold text-emerald-700">
                       {d.NCpbte && d.NCpbte !== '0' ? d.NCpbte : 'Sin comprobante'}

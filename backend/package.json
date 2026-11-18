@@ -1,6 +1,6 @@
 {
   "name": "backend-control-consumo",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "API Backend para Sistema de Control de Consumos Básicos - CMDS",
   "main": "server.js",
   "scripts": {

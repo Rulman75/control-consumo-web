@@ -18,11 +18,11 @@ router.get('/dashboard', async (req, res) => {
         }
         if (codser && codser !== 'TODOS') {
             request.input('codser', sql.VarChar, codser.trim());
-            conditions.push('(RTRIM(c.Codser) = @codser OR RTRIM(ISNULL(s.CodSer, \'\')) = @codser OR RTRIM(ISNULL(s.NombreSer, \'\')) = @codser)');
+            conditions.push('(UPPER(RTRIM(c.Codser)) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.CodSer, \'\'))) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.NombreSer, \'\'))) = UPPER(@codser))');
         }
         if (sector && sector !== 'TODOS') {
             request.input('sector', sql.VarChar, sector.trim());
-            conditions.push('RTRIM(c.Sector) = @sector');
+            conditions.push('UPPER(RTRIM(c.Sector)) = UPPER(@sector)');
         }
 
         const whereClause = conditions.join(' AND ');
@@ -30,7 +30,7 @@ router.get('/dashboard', async (req, res) => {
             OUTER APPLY (
                 SELECT TOP 1 CodSer, NombreSer
                 FROM Servicios srv
-                WHERE RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
+                WHERE UPPER(RTRIM(srv.NombreSer)) = UPPER(RTRIM(c.Codser)) OR UPPER(RTRIM(srv.CodSer)) = UPPER(RTRIM(c.Codser))
                 ORDER BY srv.CodSer
             ) s
         `;
@@ -235,10 +235,10 @@ router.get('/por-servicio', async (req, res) => {
             OUTER APPLY (
                 SELECT TOP 1 CodSer, NombreSer, Contacto
                 FROM Servicios srv
-                WHERE RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
+                WHERE UPPER(RTRIM(srv.NombreSer)) = UPPER(RTRIM(c.Codser)) OR UPPER(RTRIM(srv.CodSer)) = UPPER(RTRIM(c.Codser))
                 ORDER BY srv.CodSer
             ) s
-            WHERE (RTRIM(c.Codser) = @codser OR RTRIM(ISNULL(s.CodSer, '')) = @codser OR RTRIM(ISNULL(s.NombreSer, '')) = @codser)
+            WHERE (UPPER(RTRIM(c.Codser)) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.CodSer, ''))) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.NombreSer, ''))) = UPPER(@codser))
               AND d.FechaRecep >= @desde
               AND d.FechaRecep <= @hasta
             ORDER BY TRY_CAST(RTRIM(c.codunidad) AS INT), c.ncliente, d.FechaEmision
@@ -395,7 +395,7 @@ router.get('/consolidado', async (req, res) => {
         let sectorFilter = '';
         if (sector && sector !== 'TODOS') {
             request.input('sector', sql.VarChar, sector.trim());
-            sectorFilter = 'AND RTRIM(c.Sector) = @sector';
+            sectorFilter = 'AND UPPER(RTRIM(c.Sector)) = UPPER(@sector)';
         }
 
         const result = await request.query(`
@@ -421,11 +421,11 @@ router.get('/consolidado', async (req, res) => {
             OUTER APPLY (
                 SELECT TOP 1 CodSer, NombreSer
                 FROM Servicios srv
-                WHERE RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
+                WHERE UPPER(RTRIM(srv.NombreSer)) = UPPER(RTRIM(c.Codser)) OR UPPER(RTRIM(srv.CodSer)) = UPPER(RTRIM(c.Codser))
                 ORDER BY srv.CodSer
             ) s
             WHERE YEAR(d.FechaEmision) = @anio
-              AND (RTRIM(c.Codser) = @codser OR RTRIM(ISNULL(s.CodSer, '')) = @codser OR RTRIM(ISNULL(s.NombreSer, '')) = @codser)
+              AND (UPPER(RTRIM(c.Codser)) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.CodSer, ''))) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.NombreSer, ''))) = UPPER(@codser))
               AND UPPER(RTRIM(ISNULL(d.Estado, ''))) <> 'NULO'
               ${sectorFilter}
             ORDER BY MONTH(d.FechaEmision), TRY_CAST(RTRIM(c.codunidad) AS INT), c.ncliente
@@ -455,7 +455,7 @@ router.get('/presupuesto', async (req, res) => {
         let sectorFilter = '';
         if (sector && sector !== 'TODOS') {
             request.input('sector', sql.VarChar, sector.trim());
-            sectorFilter = 'AND RTRIM(c.Sector) = @sector';
+            sectorFilter = 'AND UPPER(RTRIM(c.Sector)) = UPPER(@sector)';
         }
 
         const result = await request.query(`
@@ -490,10 +490,10 @@ router.get('/presupuesto', async (req, res) => {
             OUTER APPLY (
                 SELECT TOP 1 CodSer, NombreSer, Contacto
                 FROM Servicios srv
-                WHERE RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
+                WHERE UPPER(RTRIM(srv.NombreSer)) = UPPER(RTRIM(c.Codser)) OR UPPER(RTRIM(srv.CodSer)) = UPPER(RTRIM(c.Codser))
                 ORDER BY srv.CodSer
             ) s
-            WHERE (RTRIM(c.Codser) = @codser OR RTRIM(ISNULL(s.CodSer, '')) = @codser OR RTRIM(ISNULL(s.NombreSer, '')) = @codser)
+            WHERE (UPPER(RTRIM(c.Codser)) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.CodSer, ''))) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.NombreSer, ''))) = UPPER(@codser))
               AND d.FechaRecep >= @desde
               AND d.FechaRecep <= @hasta
               ${sectorFilter}

@@ -2,6 +2,25 @@ const express = require('express');
 const router = express.Router();
 const { sql, getPool } = require('../db');
 
+// Función auxiliar para parsear fechas YYYY-MM-DD al mediodía (12:00:00) y evitar que UTC-3/UTC-4 reste 1 día
+function parseLocalNoonDate(d) {
+    if (!d) {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+    }
+    const str = String(d).trim();
+    const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+        return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0);
+    }
+    const parsed = new Date(d);
+    if (isNaN(parsed.getTime())) {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+    }
+    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 12, 0, 0);
+}
+
 // 1. Obtener Catálogos Generales (Servicios, Establecimientos, Años, etc.)
 router.get('/catalogos', async (req, res) => {
     try {
@@ -65,20 +84,20 @@ router.get('/clientes', async (req, res) => {
 
         if (codser && codser.trim() !== '') {
             request.input('codser', sql.VarChar, codser.trim());
-            conditions.push('(RTRIM(c.Codser) = @codser OR RTRIM(ISNULL(s.CodSer, \'\')) = @codser OR RTRIM(ISNULL(s.NombreSer, \'\')) = @codser)');
+            conditions.push('(UPPER(RTRIM(c.Codser)) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.CodSer, \'\'))) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.NombreSer, \'\'))) = UPPER(@codser))');
         }
         if (sector && sector.trim() !== '') {
             request.input('sector', sql.VarChar, sector.trim());
-            conditions.push('RTRIM(c.Sector) = @sector');
+            conditions.push('UPPER(RTRIM(c.Sector)) = UPPER(@sector)');
         }
         if (search && search.trim() !== '') {
-            request.input('search', sql.VarChar, `%${search.trim()}%`);
+            request.input('search', sql.VarChar, `%${search.trim().toUpperCase()}%`);
             conditions.push(`(
                 CAST(c.ncliente AS VARCHAR(50)) LIKE @search
-                OR RTRIM(c.nombre) LIKE @search
-                OR RTRIM(c.codunidad) LIKE @search
-                OR RTRIM(ISNULL(c.NMedidor, '')) LIKE @search
-                OR RTRIM(ISNULL(e.Descripcion, '')) LIKE @search
+                OR UPPER(RTRIM(c.nombre)) LIKE @search
+                OR UPPER(RTRIM(c.codunidad)) LIKE @search
+                OR UPPER(RTRIM(ISNULL(c.NMedidor, ''))) LIKE @search
+                OR UPPER(RTRIM(ISNULL(e.Descripcion, ''))) LIKE @search
             )`);
         }
 
@@ -100,7 +119,7 @@ router.get('/clientes', async (req, res) => {
             OUTER APPLY (
                 SELECT TOP 1 CodSer, NombreSer
                 FROM Servicios srv
-                WHERE RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
+                WHERE UPPER(RTRIM(srv.NombreSer)) = UPPER(RTRIM(c.Codser)) OR UPPER(RTRIM(srv.CodSer)) = UPPER(RTRIM(c.Codser))
                 ORDER BY srv.CodSer
             ) s
             WHERE ${conditions.join(' AND ')}
@@ -127,7 +146,7 @@ router.get('/clientes/:ncliente', async (req, res) => {
         let extraWhere = '';
         if (codser && codser.trim() !== '') {
             request.input('codser', sql.VarChar, codser.trim());
-            extraWhere = 'AND (RTRIM(c.Codser) = @codser OR RTRIM(ISNULL(s.CodSer, \'\')) = @codser)';
+            extraWhere = 'AND (UPPER(RTRIM(c.Codser)) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.CodSer, \'\'))) = UPPER(@codser))';
         }
 
         const result = await request.query(`
@@ -146,7 +165,7 @@ router.get('/clientes/:ncliente', async (req, res) => {
             OUTER APPLY (
                 SELECT TOP 1 CodSer, NombreSer
                 FROM Servicios srv
-                WHERE RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
+                WHERE UPPER(RTRIM(srv.NombreSer)) = UPPER(RTRIM(c.Codser)) OR UPPER(RTRIM(srv.CodSer)) = UPPER(RTRIM(c.Codser))
                 ORDER BY srv.CodSer
             ) s
             WHERE c.ncliente = @ncliente ${extraWhere}
@@ -207,7 +226,7 @@ router.post('/clientes', async (req, res) => {
     }
 });
 
-// 5. Trasladar NIC (Frm_clientes.vb -> Button1_Click)
+// 5. Trasladar NIC (Frm_clientes.vb -> Button1_Click) - 100% compatible con Modo Dual (SQL Server + PostgreSQL)
 router.post('/clientes/trasladar', async (req, res) => {
     const { nclienteActual, nclienteNuevo, trasladarDocumentos = true } = req.body;
     if (!nclienteActual || !nclienteNuevo || isNaN(Number(nclienteActual)) || isNaN(Number(nclienteNuevo))) {
@@ -279,7 +298,7 @@ router.get('/servicios', async (req, res) => {
                 RTRIM(ISNULL(s.Cuenta2, '')) AS Cuenta2,
                 RTRIM(ISNULL(s.DescCuenta2, '')) AS DescCuenta2,
                 ISNULL(s.Correlativo, 0) AS Correlativo,
-                (SELECT COUNT(*) FROM Clientes c WHERE RTRIM(c.Codser) = RTRIM(s.NombreSer) OR RTRIM(c.Codser) = RTRIM(s.CodSer)) AS TotalClientes
+                (SELECT COUNT(*) FROM Clientes c WHERE UPPER(RTRIM(c.Codser)) = UPPER(RTRIM(s.NombreSer)) OR UPPER(RTRIM(c.Codser)) = UPPER(RTRIM(s.CodSer))) AS TotalClientes
             FROM Servicios s
             ORDER BY s.NombreSer ASC, s.CodSer ASC
         `);
@@ -301,7 +320,7 @@ router.post('/servicios', async (req, res) => {
         const pool = await getPool();
         const checkReq = pool.request();
         checkReq.input('codser', sql.VarChar, CodSer.trim());
-        const checkRes = await checkReq.query('SELECT CodSer FROM Servicios WHERE RTRIM(CodSer) = @codser');
+        const checkRes = await checkReq.query('SELECT CodSer FROM Servicios WHERE UPPER(RTRIM(CodSer)) = UPPER(@codser)');
 
         const saveReq = pool.request();
         saveReq.input('codser', sql.VarChar, CodSer.trim());
@@ -321,7 +340,7 @@ router.post('/servicios', async (req, res) => {
                     Cuenta = @cuenta,
                     Cuenta2 = @cuenta2,
                     DescCuenta2 = @desccuenta2
-                WHERE RTRIM(CodSer) = @codser
+                WHERE UPPER(RTRIM(CodSer)) = UPPER(@codser)
             `);
             res.json({ success: true, mode: 'updated', message: 'Servicio actualizado correctamente.' });
         } else {
@@ -346,13 +365,17 @@ router.get('/documentos/cliente', async (req, res) => {
 
     try {
         const pool = await getPool();
+        if (pool.syncNow) {
+            await pool.syncNow().catch(() => {});
+        }
+
         const cliReq = pool.request();
         cliReq.input('ncliente', sql.Numeric(18, 0), Number(ncliente));
 
         let srvFilter = '';
         if (codser && codser.trim() !== '') {
             cliReq.input('codser', sql.VarChar, codser.trim());
-            srvFilter = 'AND (RTRIM(c.Codser) = @codser OR RTRIM(ISNULL(s.CodSer, \'\')) = @codser OR RTRIM(ISNULL(s.NombreSer, \'\')) = @codser)';
+            srvFilter = 'AND (UPPER(RTRIM(c.Codser)) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.CodSer, \'\'))) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.NombreSer, \'\'))) = UPPER(@codser))';
         }
 
         const cliRes = await cliReq.query(`
@@ -371,7 +394,7 @@ router.get('/documentos/cliente', async (req, res) => {
             OUTER APPLY (
                 SELECT TOP 1 CodSer, NombreSer
                 FROM Servicios srv
-                WHERE RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
+                WHERE UPPER(RTRIM(srv.NombreSer)) = UPPER(RTRIM(c.Codser)) OR UPPER(RTRIM(srv.CodSer)) = UPPER(RTRIM(c.Codser))
                 ORDER BY srv.CodSer
             ) s
             WHERE c.ncliente = @ncliente ${srvFilter}
@@ -399,7 +422,7 @@ router.get('/documentos/cliente', async (req, res) => {
                 RTRIM(d.NCliente) AS NCliente,
                 ISNULL(d.Monto, 0) AS Monto,
                 RTRIM(ISNULL(d.Estado, '')) AS Estado,
-                RTRIM(ISNULL(d.Tipo, '')) AS Tipo,
+                UPPER(RTRIM(ISNULL(d.Tipo, ''))) AS Tipo,
                 d.FechaRecep,
                 RTRIM(ISNULL(d.ULectura, '0')) AS ULectura,
                 RTRIM(ISNULL(d.ALectura, '0')) AS ALectura,
@@ -420,7 +443,7 @@ router.get('/documentos/cliente', async (req, res) => {
             FROM Documentos d
             INNER JOIN Clientes c ON RTRIM(d.NCliente) = CAST(c.ncliente AS VARCHAR(50))
             WHERE RTRIM(d.NCliente) = @nclienteStr
-              AND RTRIM(c.Codser) = @codserDoc
+              AND UPPER(RTRIM(c.Codser)) = UPPER(@codserDoc)
               ${anioCondition}
             ORDER BY d.FechaEmision DESC, d.NDocto DESC
         `);
@@ -450,7 +473,7 @@ router.get('/documentos/buscar', async (req, res) => {
         let extraFilters = '';
         if (codser && codser.trim() !== '') {
             request.input('codser', sql.VarChar, codser.trim());
-            extraFilters += ' AND (RTRIM(c.Codser) = @codser OR RTRIM(ISNULL(s.CodSer, \'\')) = @codser OR RTRIM(ISNULL(s.NombreSer, \'\')) = @codser)';
+            extraFilters += ' AND (UPPER(RTRIM(c.Codser)) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.CodSer, \'\'))) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.NombreSer, \'\'))) = UPPER(@codser))';
         }
         if (ncliente && String(ncliente).trim() !== '') {
             request.input('ncliente', sql.VarChar, String(ncliente).trim());
@@ -463,7 +486,7 @@ router.get('/documentos/buscar', async (req, res) => {
                 RTRIM(d.NCliente) AS NCliente,
                 ISNULL(d.Monto, 0) AS Monto,
                 RTRIM(ISNULL(d.Estado, '')) AS Estado,
-                RTRIM(ISNULL(d.Tipo, '')) AS Tipo,
+                UPPER(RTRIM(ISNULL(d.Tipo, ''))) AS Tipo,
                 d.FechaRecep,
                 RTRIM(ISNULL(d.ULectura, '0')) AS ULectura,
                 RTRIM(ISNULL(d.ALectura, '0')) AS ALectura,
@@ -495,7 +518,7 @@ router.get('/documentos/buscar', async (req, res) => {
             OUTER APPLY (
                 SELECT TOP 1 CodSer, NombreSer
                 FROM Servicios srv
-                WHERE RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
+                WHERE UPPER(RTRIM(srv.NombreSer)) = UPPER(RTRIM(c.Codser)) OR UPPER(RTRIM(srv.CodSer)) = UPPER(RTRIM(c.Codser))
                 ORDER BY srv.CodSer
             ) s
             WHERE RTRIM(d.NDocto) = @ndocto ${extraFilters}
@@ -562,28 +585,25 @@ router.post('/documentos', async (req, res) => {
             WHERE RTRIM(NDocto) = @ndoctoCheck AND RTRIM(NCliente) = @nclienteCheck
         `);
 
-        const nowDate = new Date();
-        const parseDateOrDefault = (d) => (d ? new Date(d) : nowDate);
-
         const saveReq = pool.request();
         saveReq.input('ndocto', sql.VarChar, String(NDocto).trim());
         saveReq.input('ncliente', sql.VarChar, String(NCliente).trim());
         saveReq.input('monto', sql.Int, Number(Monto) || 0);
         saveReq.input('estado', sql.VarChar, String(Estado || 'Vigente').trim());
-        saveReq.input('tipo', sql.VarChar, String(Tipo || 'FI').trim());
+        saveReq.input('tipo', sql.VarChar, String(Tipo || 'FI').trim().toUpperCase());
         saveReq.input('ulectura', sql.VarChar, String(ULectura || '0').trim());
         saveReq.input('alectura', sql.VarChar, String(ALectura || '0').trim());
-        saveReq.input('fechalectura', sql.DateTime, parseDateOrDefault(FechaLectura));
+        saveReq.input('fechalectura', sql.DateTime, parseLocalNoonDate(FechaLectura));
         saveReq.input('consumo', sql.Int, Number(Consumo) || 0);
-        saveReq.input('fechaemision', sql.DateTime, parseDateOrDefault(FechaEmision));
-        saveReq.input('fechapago', sql.DateTime, parseDateOrDefault(FechaPago));
+        saveReq.input('fechaemision', sql.DateTime, parseLocalNoonDate(FechaEmision));
+        saveReq.input('fechapago', sql.DateTime, parseLocalNoonDate(FechaPago));
         saveReq.input('ncpbte', sql.VarChar, String(NCpbte || '0').trim());
         saveReq.input('demanda', sql.Int, Number(Demanda) || 0);
         saveReq.input('iva', sql.Int, Number(Iva) || 0);
         saveReq.input('intereses', sql.Int, Number(Intereses) || 0);
         saveReq.input('otro', sql.Int, Number(Otro) || 0);
-        saveReq.input('fechaven', sql.DateTime, parseDateOrDefault(FechaVen));
-        saveReq.input('fechaproxlec', sql.DateTime, parseDateOrDefault(FechaProxLec));
+        saveReq.input('fechaven', sql.DateTime, parseLocalNoonDate(FechaVen));
+        saveReq.input('fechaproxlec', sql.DateTime, parseLocalNoonDate(FechaProxLec));
         saveReq.input('nomina', sql.Int, Number(Nomina) || 0);
 
         if (checkRes.recordset.length > 0) {

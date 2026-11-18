@@ -2,17 +2,38 @@ const express = require('express');
 const router = express.Router();
 const { sql, getPool } = require('../db');
 
+function parseLocalNoonDate(d) {
+    if (!d) {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+    }
+    const str = String(d).trim();
+    const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+        return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0);
+    }
+    const parsed = new Date(d);
+    if (isNaN(parsed.getTime())) {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+    }
+    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 12, 0, 0);
+}
+
 // 1. Listar Nóminas Recientes (Resumen para seguimiento rápido)
 router.get('/nominas/recientes', async (req, res) => {
     try {
         const pool = await getPool();
+        if (pool.syncNow) {
+            await pool.syncNow().catch(() => {});
+        }
         const result = await pool.request().query(`
             SELECT TOP 60
                 d.Nomina,
                 RTRIM(ISNULL(MAX(c.Codser), '')) AS Codser,
                 RTRIM(ISNULL(MAX(s.NombreSer), MAX(c.Codser))) AS NombreSer,
                 RTRIM(ISNULL(MAX(c.Sector), '')) AS Sector,
-                RTRIM(ISNULL(MAX(d.Tipo), '')) AS Tipo,
+                UPPER(RTRIM(ISNULL(MAX(d.Tipo), ''))) AS Tipo,
                 COUNT(*) AS TotalDocumentos,
                 SUM(ISNULL(d.Monto, 0)) AS MontoTotal,
                 RTRIM(ISNULL(MAX(d.Estado), '')) AS Estado,
@@ -25,7 +46,7 @@ router.get('/nominas/recientes', async (req, res) => {
             OUTER APPLY (
                 SELECT TOP 1 CodSer, NombreSer
                 FROM Servicios srv
-                WHERE RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
+                WHERE UPPER(RTRIM(srv.NombreSer)) = UPPER(RTRIM(c.Codser)) OR UPPER(RTRIM(srv.CodSer)) = UPPER(RTRIM(c.Codser))
                 ORDER BY srv.CodSer
             ) s
             WHERE ISNULL(d.Nomina, 0) > 0
@@ -48,6 +69,9 @@ router.get('/nominas/pendientes', async (req, res) => {
 
     try {
         const pool = await getPool();
+        if (pool.syncNow) {
+            await pool.syncNow().catch(() => {});
+        }
         const request = pool.request();
         request.input('codser', sql.VarChar, codser.trim());
         request.input('tipo', sql.VarChar, tipo.trim());
@@ -69,7 +93,7 @@ router.get('/nominas/pendientes', async (req, res) => {
                 ISNULL(d.Nomina, 0) AS Nomina,
                 RTRIM(ISNULL(c.Codser, '')) AS Codser,
                 RTRIM(ISNULL(s.NombreSer, c.Codser)) AS NombreSer,
-                RTRIM(ISNULL(d.Tipo, '')) AS Tipo,
+                UPPER(RTRIM(ISNULL(d.Tipo, ''))) AS Tipo,
                 RTRIM(ISNULL(c.Sector, '')) AS Sector
             FROM Clientes c
             INNER JOIN Documentos d ON CAST(c.ncliente AS VARCHAR(50)) = RTRIM(d.NCliente)
@@ -77,13 +101,13 @@ router.get('/nominas/pendientes', async (req, res) => {
             OUTER APPLY (
                 SELECT TOP 1 CodSer, NombreSer
                 FROM Servicios srv
-                WHERE RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
+                WHERE UPPER(RTRIM(srv.NombreSer)) = UPPER(RTRIM(c.Codser)) OR UPPER(RTRIM(srv.CodSer)) = UPPER(RTRIM(c.Codser))
                 ORDER BY srv.CodSer
             ) s
             WHERE ISNULL(d.Nomina, 0) = 0
-              AND (RTRIM(c.Codser) = @codser OR RTRIM(ISNULL(s.CodSer, '')) = @codser OR RTRIM(ISNULL(s.NombreSer, '')) = @codser)
-              AND RTRIM(d.Tipo) = @tipo
-              AND RTRIM(c.Sector) = @sector
+              AND (UPPER(RTRIM(c.Codser)) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.CodSer, ''))) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.NombreSer, ''))) = UPPER(@codser))
+              AND UPPER(RTRIM(d.Tipo)) = UPPER(@tipo)
+              AND UPPER(RTRIM(c.Sector)) = UPPER(@sector)
             ORDER BY TRY_CAST(RTRIM(c.codunidad) AS INT), c.ncliente, d.FechaEmision
         `);
 
@@ -94,7 +118,7 @@ router.get('/nominas/pendientes', async (req, res) => {
     }
 });
 
-// 3. Generar Nueva Nómina (GeneraNomina.vb -> Button2_Click)
+// 3. Generar Nueva Nómina (GeneraNomina.vb -> Button2_Click) - 100% compatible con Modo Dual (SQL Server + PostgreSQL)
 router.post('/nominas/generar', async (req, res) => {
     const { codser, tipo, sector } = req.body;
     if (!codser || !tipo || !sector) {
@@ -103,9 +127,12 @@ router.post('/nominas/generar', async (req, res) => {
 
     try {
         const pool = await getPool();
-        const corrReq = pool.request();
-        const corrRes = await corrReq.query('SELECT ISNULL(MAX(Nomina), 0) + 1 AS SiguienteNomina FROM Documentos');
-        const nuevaNomina = corrRes.recordset[0].SiguienteNomina;
+        if (pool.syncNow) {
+            await pool.syncNow().catch(() => {});
+        }
+
+        const corrRes = await pool.request().query('SELECT ISNULL(MAX(Nomina), 0) + 1 AS SiguienteNomina FROM Documentos');
+        const nuevaNomina = Number(corrRes.recordset[0].SiguienteNomina);
 
         const updReq = pool.request();
         updReq.input('nuevaNomina', sql.Int, nuevaNomina);
@@ -118,14 +145,13 @@ router.post('/nominas/generar', async (req, res) => {
             SET Nomina = @nuevaNomina,
                 Estado = 'Enviada'
             WHERE ISNULL(Nomina, 0) = 0
-              AND RTRIM(Tipo) = @tipo
+              AND UPPER(RTRIM(Tipo)) = UPPER(@tipo)
               AND RTRIM(NCliente) IN (
                   SELECT CAST(c.ncliente AS VARCHAR(50))
                   FROM Clientes c
-                  LEFT JOIN Servicios srv
-                    ON RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
-                  WHERE RTRIM(c.Sector) = @sector
-                    AND (RTRIM(c.Codser) = @codser OR RTRIM(ISNULL(srv.CodSer, '')) = @codser OR RTRIM(ISNULL(srv.NombreSer, '')) = @codser)
+                  LEFT JOIN Servicios s ON UPPER(RTRIM(s.NombreSer)) = UPPER(RTRIM(c.Codser)) OR UPPER(RTRIM(s.CodSer)) = UPPER(RTRIM(c.Codser))
+                  WHERE (UPPER(RTRIM(c.Codser)) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.CodSer, ''))) = UPPER(@codser) OR UPPER(RTRIM(ISNULL(s.NombreSer, ''))) = UPPER(@codser))
+                    AND UPPER(RTRIM(c.Sector)) = UPPER(@sector)
               )
         `);
 
@@ -190,6 +216,9 @@ router.get('/pagos/:nomina', async (req, res) => {
 
     try {
         const pool = await getPool();
+        if (pool.syncNow) {
+            await pool.syncNow().catch(() => {});
+        }
         const request = pool.request();
         request.input('nomina', sql.Int, Number(nomina));
 
@@ -206,7 +235,7 @@ router.get('/pagos/:nomina', async (req, res) => {
                 RTRIM(ISNULL(d.NCpbte, '0')) AS NCpbte,
                 ISNULL(d.Nomina, 0) AS Nomina,
                 RTRIM(ISNULL(d.Estado, '')) AS Estado,
-                RTRIM(ISNULL(d.Tipo, '')) AS Tipo,
+                UPPER(RTRIM(ISNULL(d.Tipo, ''))) AS Tipo,
                 ISNULL(d.Autorizada, 0) AS Autorizada,
                 RTRIM(ISNULL(s.CodSer, c.Codser)) AS CodSer,
                 RTRIM(ISNULL(s.NombreSer, c.Codser)) AS NombreSer,
@@ -216,7 +245,7 @@ router.get('/pagos/:nomina', async (req, res) => {
             OUTER APPLY (
                 SELECT TOP 1 CodSer, NombreSer
                 FROM Servicios srv
-                WHERE RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
+                WHERE UPPER(RTRIM(srv.NombreSer)) = UPPER(RTRIM(c.Codser)) OR UPPER(RTRIM(srv.CodSer)) = UPPER(RTRIM(c.Codser))
                 ORDER BY srv.CodSer
             ) s
             LEFT JOIN LIC_ESTABLECIMIENTO e ON TRY_CAST(RTRIM(c.codunidad) AS INT) = e.CodUnidad
@@ -267,7 +296,7 @@ router.post('/pagos', async (req, res) => {
         const pool = await getPool();
         const request = pool.request();
         request.input('nomina', sql.Int, Number(nomina));
-        request.input('fechapago', sql.DateTime, fechaPago ? new Date(fechaPago) : new Date());
+        request.input('fechapago', sql.DateTime, parseLocalNoonDate(fechaPago));
         request.input('ncpbte', sql.VarChar, String(ncpbte).trim());
 
         const result = await request.query(`
@@ -350,6 +379,11 @@ const SOFTLAND_52_HEADERS = [
 
 const formatShortDate = (d) => {
     if (!d) return '';
+    const str = typeof d === 'string' ? d : (d instanceof Date ? d.toISOString() : String(d));
+    const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+        return `${m[3]}-${m[2]}-${m[1]}`;
+    }
     const dt = new Date(d);
     if (isNaN(dt.getTime())) return '';
     const day = String(dt.getDate()).padStart(2, '0');
@@ -367,6 +401,9 @@ router.get('/softland/:nomina', async (req, res) => {
 
     try {
         const pool = await getPool();
+        if (pool.syncNow) {
+            await pool.syncNow().catch(() => {});
+        }
         const request = pool.request();
         request.input('nomina', sql.Int, Number(nomina));
 
@@ -380,7 +417,7 @@ router.get('/softland/:nomina', async (req, res) => {
                 RTRIM(d.NDocto) AS NDocto,
                 ISNULL(d.Monto, 0) AS Monto,
                 RTRIM(ISNULL(d.Estado, '')) AS Estado,
-                RTRIM(ISNULL(d.Tipo, '')) AS Tipo,
+                UPPER(RTRIM(ISNULL(d.Tipo, ''))) AS Tipo,
                 d.FechaEmision,
                 d.FechaVen,
                 ISNULL(d.Nomina, 0) AS Nomina,
@@ -398,7 +435,7 @@ router.get('/softland/:nomina', async (req, res) => {
             OUTER APPLY (
                 SELECT TOP 1 CodSer, NombreSer, Rut, Cuenta, Cuenta2, DescCuenta2
                 FROM Servicios srv
-                WHERE RTRIM(srv.NombreSer) = RTRIM(c.Codser) OR RTRIM(srv.CodSer) = RTRIM(c.Codser)
+                WHERE UPPER(RTRIM(srv.NombreSer)) = UPPER(RTRIM(c.Codser)) OR UPPER(RTRIM(srv.CodSer)) = UPPER(RTRIM(c.Codser))
                 ORDER BY srv.CodSer
             ) s
             LEFT JOIN LIC_ESTABLECIMIENTO e ON TRY_CAST(RTRIM(c.codunidad) AS INT) = e.CodUnidad
